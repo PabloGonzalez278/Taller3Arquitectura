@@ -1,66 +1,77 @@
 package com.example;
 
+import java.io.IOException;
 import software.amazon.awssdk.services.sns.SnsClient;
-import software.amazon.awssdk.services.sns.model.*;
-
-import com.sendgrid.*;
+import software.amazon.awssdk.services.sns.model.CreateTopicRequest;
+import software.amazon.awssdk.services.sns.model.CreateTopicResponse;
+import software.amazon.awssdk.services.sns.model.SubscribeRequest;
+import software.amazon.awssdk.services.sns.model.SubscribeResponse;
+import com.sendgrid.Method;
+import com.sendgrid.Request;
+import com.sendgrid.SendGrid;
 import com.sendgrid.helpers.mail.Mail;
-import com.sendgrid.helpers.mail.objects.*;
-
+import com.sendgrid.helpers.mail.objects.Content;
+import com.sendgrid.helpers.mail.objects.Email;
 import com.twilio.Twilio;
 import com.twilio.rest.api.v2010.account.Message;
 import com.twilio.type.PhoneNumber;
 
-import java.io.IOException;
-
+/**
+ * Clase Subscriber para recibir notificaciones desde AWS SNS.
+ */
 public class Subscriber {
-    private static final String AWS_TOPIC_NAME = "CompraNotificacion";
-    private static SnsClient snsClient = SnsClient.create();
+    private static final String TWILIO_ACCOUNT_SID = "TU_TWILIO_SID";
+    private static final String TWILIO_AUTH_TOKEN = "TU_TWILIO_AUTH_TOKEN";
+    private static final String SENDGRID_API_KEY = "TU_SENDGRID_API_KEY";
+    private static final String TOPIC_NAME = "CompraNotificacion";
 
-    public static void main(String[] args) {
-        String topicArn = createTopic(AWS_TOPIC_NAME);
-        subscribeToTopic(topicArn, "email", "usuario@example.com");
+    private final SnsClient snsClient;
+    private final String topicArn;
 
-        // Simulación de recepción de mensaje
-        while (true) {
-            try {
-                Thread.sleep(10000); // Simula la espera de notificaciones
-                String receivedMessage = "Simulación de mensaje recibido";
-                System.out.println("Recibido: " + receivedMessage);
-                sendEmailNotification(receivedMessage);
-                sendSmsNotification(receivedMessage);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
+    /**
+     * Constructor de la clase Subscriber.
+     */
+    public Subscriber() {
+        this.snsClient = SnsClient.create();
+        this.topicArn = createTopic();
+        subscribeToTopic();
     }
 
-    public static String createTopic(String topicName) {
-        CreateTopicRequest request = CreateTopicRequest.builder().name(topicName).build();
+    /**
+     * Método principal que inicia el suscriptor.
+     * @param args Argumentos de línea de comandos.
+     */
+    public static void main(String[] args) {
+        new Subscriber();
+        System.out.println("Esperando mensajes...");
+    }
+
+    private String createTopic() {
+        CreateTopicRequest request = CreateTopicRequest.builder().name(TOPIC_NAME).build();
         CreateTopicResponse response = snsClient.createTopic(request);
         System.out.println("Tópico creado: " + response.topicArn());
         return response.topicArn();
     }
 
-    public static void subscribeToTopic(String topicArn, String protocol, String endpoint) {
+    private void subscribeToTopic() {
         SubscribeRequest request = SubscribeRequest.builder()
                 .topicArn(topicArn)
-                .protocol(protocol)
-                .endpoint(endpoint)
+                .protocol("email")
+                .endpoint("usuario@example.com")
                 .build();
 
-        snsClient.subscribe(request);
-        System.out.println("Suscripción creada para: " + endpoint);
+        SubscribeResponse response = snsClient.subscribe(request);
+        System.out.println("Suscripción creada con ARN: " + response.subscriptionArn());
     }
 
-    public static void sendEmailNotification(String message) {
+    private void sendEmailNotification(String message) {
         Email from = new Email("noreply@example.com");
         String subject = "Notificación de Compra";
         Email to = new Email("usuario@example.com");
         Content content = new Content("text/plain", message);
         Mail mail = new Mail(from, subject, to, content);
 
-        SendGrid sg = new SendGrid("SENDGRID_API_KEY");
+        SendGrid sg = new SendGrid(SENDGRID_API_KEY);
         Request request = new Request();
         try {
             request.setMethod(Method.POST);
@@ -73,12 +84,12 @@ public class Subscriber {
         }
     }
 
-    public static void sendSmsNotification(String message) {
-        Twilio.init("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN");
-        Message sms = Message.creator(new PhoneNumber("+1234567890"),
-                                      new PhoneNumber("+0987654321"),
-                                      message)
-                               .create();
-        System.out.println("SMS enviado: " + sms.getSid());
+    private void sendSmsNotification(String message) {
+        Twilio.init(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+        Message.creator(new PhoneNumber("+1234567890"),
+                new PhoneNumber("+0987654321"),
+                message)
+                .create();
+        System.out.println("SMS enviado.");
     }
 }
